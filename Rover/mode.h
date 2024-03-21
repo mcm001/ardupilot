@@ -657,8 +657,12 @@ public:
     bool requires_position() const override { return false; }
     bool requires_velocity() const override { return false; }
 
-protected:
+    // sailboats in acro mode support user manually initiating tacking from transmitter
+    // This just inverts the wingsail direction
+    void handle_tack_request() override;
 
+protected:
+    int _tail_flap_dir = 1;
     void _exit() override;
 };
 

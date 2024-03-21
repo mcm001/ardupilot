@@ -221,8 +221,10 @@ bool RC_Channel_Rover::do_aux_function(const aux_func_t ch_option, const AuxSwit
 
     // trigger sailboat tack
     case AUX_FUNC::SAILBOAT_TACK:
-        // any switch movement interpreted as request to tack
-        rover.control_mode->handle_tack_request();
+        // switch changing from positive to forwards limit interpreted as a tack request
+        if (ch_flag == AuxSwitchPos::HIGH) {
+            rover.control_mode->handle_tack_request();
+        }
         break;
 
     // sailboat motor state 3pos
