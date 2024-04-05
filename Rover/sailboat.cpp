@@ -1,10 +1,10 @@
 #include "Rover.h"
 
-#define SAILBOAT_AUTO_TACKING_TIMEOUT_MS 6000                      // tacks in auto mode timeout if not successfully completed within this many milliseconds
-#define SAILBOAT_TACKING_ACCURACY_DEG 10                           // tack is considered complete when vehicle is within this many degrees of target tack angle
-#define SAILBOAT_NOGO_PAD 10                                       // deg, the no go zone is padded by this much when deciding if we should use the Sailboat heading controller
-#define TACK_RETRY_TIME_MS 5000                                    // Can only try another auto mode tack this many milliseconds after the last is cleared (either competed or timed-out)
-#define SAILBOAT_WINGSAIL_TACKING_DEPOWER_WINDOW_RAD radians(10)   // Apparent wind angle required while tacking to force the sail to depower
+#define SAILBOAT_AUTO_TACKING_TIMEOUT_MS 6000             // tacks in auto mode timeout if not successfully completed within this many milliseconds
+#define SAILBOAT_TACKING_ACCURACY_DEG 10                  // tack is considered complete when vehicle is within this many degrees of target tack angle
+#define SAILBOAT_NOGO_PAD 10                              // deg, the no go zone is padded by this much when deciding if we should use the Sailboat heading controller
+#define TACK_RETRY_TIME_MS 5000                           // Can only try another auto mode tack this many milliseconds after the last is cleared (either competed or timed-out)
+#define SAILBOAT_WINGSAIL_TACKING_DEPOWER_WINDOW_DEG 10   // Apparent wind angle required while tacking to force the sail to depower
 
 /*
 To Do List
@@ -269,7 +269,13 @@ void Sailboat::get_throttle_and_mainsail_out(float desired_speed, float &throttl
     }
 
     // If we're trying to tack and we're ~head to wind, depower the wingsail
-    if (currently_tacking && wind_dir_apparent_abs < SAILBOAT_WINGSAIL_TACKING_DEPOWER_WINDOW_RAD) {
+    static int i; i++;
+
+    if (i % 100 == 0) GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Angle: %f", wind_dir_apparent_abs);
+    
+    // straight upwind = 180 degrees to the wind
+    if (currently_tacking && (180 - wind_dir_apparent_abs) < SAILBOAT_WINGSAIL_TACKING_DEPOWER_WINDOW_DEG) {
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Tacking, rest");
         wingsail_out = 0;
     }
 
