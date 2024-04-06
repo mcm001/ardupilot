@@ -270,12 +270,10 @@ void Sailboat::get_throttle_and_mainsail_out(float desired_speed, float &throttl
 
     // If we're trying to tack and we're ~head to wind, depower the wingsail
     if (currently_tacking && wind_dir_apparent_abs < SAILBOAT_WINGSAIL_TACKING_DEPOWER_WINDOW_DEG) {
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Tacking, rest");
         wingsail_out = 0;
     }
     // same but for jibing
     if (currently_tacking && (180-wind_dir_apparent_abs) < SAILBOAT_WINGSAIL_TACKING_DEPOWER_WINDOW_DEG) {
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Jibing, rest");
         wingsail_out = 0;
     }
 
