@@ -4,7 +4,7 @@
 #define SAILBOAT_TACKING_ACCURACY_DEG 10                  // tack is considered complete when vehicle is within this many degrees of target tack angle
 #define SAILBOAT_NOGO_PAD 10                              // deg, the no go zone is padded by this much when deciding if we should use the Sailboat heading controller
 #define TACK_RETRY_TIME_MS 5000                           // Can only try another auto mode tack this many milliseconds after the last is cleared (either competed or timed-out)
-#define SAILBOAT_WINGSAIL_TACKING_DEPOWER_WINDOW_DEG 10   // Apparent wind angle required while tacking to force the sail to depower
+#define SAILBOAT_WINGSAIL_TACKING_DEPOWER_WINDOW_DEG 20   // Apparent wind angle required while tacking to force the sail to depower
 
 /*
 To Do List
@@ -269,13 +269,13 @@ void Sailboat::get_throttle_and_mainsail_out(float desired_speed, float &throttl
     }
 
     // If we're trying to tack and we're ~head to wind, depower the wingsail
-    static int i; i++;
-
-    if (i % 100 == 0) GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Angle: %f", wind_dir_apparent_abs);
-    
-    // straight upwind = 180 degrees to the wind
-    if (currently_tacking && (180 - wind_dir_apparent_abs) < SAILBOAT_WINGSAIL_TACKING_DEPOWER_WINDOW_DEG) {
+    if (currently_tacking && wind_dir_apparent_abs < SAILBOAT_WINGSAIL_TACKING_DEPOWER_WINDOW_DEG) {
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Tacking, rest");
+        wingsail_out = 0;
+    }
+    // same but for jibing
+    if (currently_tacking && (180-wind_dir_apparent_abs) < SAILBOAT_WINGSAIL_TACKING_DEPOWER_WINDOW_DEG) {
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Jibing, rest");
         wingsail_out = 0;
     }
 
@@ -413,7 +413,13 @@ bool Sailboat::use_indirect_route(float desired_heading_cd) const
 
     // check if desired heading is in the no go zone, if it is we can't go direct
     // pad no go zone, this allows use of heading controller rather than L1 when close to the wind
-    return fabsf(wrap_PI(rover.g2.windvane.get_true_wind_direction_rad() - desired_heading_rad)) <= radians(sail_no_go + SAILBOAT_NOGO_PAD);
+    const auto close_to_irons = fabsf(wrap_PI(rover.g2.windvane.get_true_wind_direction_rad() - desired_heading_rad)) 
+        <= radians(sail_no_go + SAILBOAT_NOGO_PAD);
+
+    const auto close_to_dead_down = fabsf(wrap_PI(radians(180) + rover.g2.windvane.get_true_wind_direction_rad() - desired_heading_rad)) 
+        <= radians(sail_no_go + SAILBOAT_NOGO_PAD);
+
+    return close_to_irons || close_to_dead_down;
 }
 
 // if we can't sail on the desired heading then we should pick the best heading that we can sail on
@@ -435,7 +441,15 @@ float Sailboat::calc_heading(float desired_heading_cd)
     // this allows use of heading controller rather than L1 when desired
     // this is used in the 'SAILBOAT_NOGO_PAD' region
     const float true_wind_rad = rover.g2.windvane.get_true_wind_direction_rad();
-    if (fabsf(wrap_PI(true_wind_rad - desired_heading_rad)) > radians(sail_no_go) && !currently_tacking) {
+    
+    // // check if we're close to the wind, but within the padding
+    const bool outside_irons = fabsf(wrap_PI(true_wind_rad - desired_heading_rad)) > radians(sail_no_go);
+    const bool outside_ddw = fabsf(wrap_PI((true_wind_rad + radians(180)) - desired_heading_rad)) > radians(sail_no_go);
+    const bool is_traveling_upwind = fabsf(wrap_PI(true_wind_rad - desired_heading_rad)) < radians(90);
+
+    if ((outside_irons && outside_ddw) && !currently_tacking) {
+
+    // if (fabsf(wrap_PI(true_wind_rad - desired_heading_rad)) > radians(sail_no_go) && !currently_tacking) {
 
         // calculate the tack the new heading would be on
         const float new_heading_apparent_angle = wrap_PI(true_wind_rad - desired_heading_rad);
@@ -474,19 +488,28 @@ float Sailboat::calc_heading(float desired_heading_cd)
     const float cross_track_error = rover.g2.wp_nav.crosstrack_error();
     if ((fabsf(cross_track_error) >= xtrack_max) && !is_zero(xtrack_max) && !should_tack && !currently_tacking) {
         // make sure the new tack will reduce the cross track error
+        
+        bool should_be_starboard = is_negative(cross_track_error);
+        if (!is_traveling_upwind) {
+            should_be_starboard = !should_be_starboard;
+        }
+
         // if were on starboard tack we are traveling towards the left hand boundary
-        if (is_positive(cross_track_error) && (current_tack == AP_WindVane::Sailboat_Tack::TACK_STARBOARD)) {
+        if (!should_be_starboard && (current_tack == AP_WindVane::Sailboat_Tack::TACK_STARBOARD)) {
             should_tack = true;
         }
         // if were on port tack we are traveling towards the right hand boundary
-        if (is_negative(cross_track_error) && (current_tack == AP_WindVane::Sailboat_Tack::TACK_PORT)) {
+        if (should_be_starboard && (current_tack == AP_WindVane::Sailboat_Tack::TACK_PORT)) {
             should_tack = true;
         }
     }
 
-    // calculate left and right no go headings looking upwind, Port tack heading is left no-go, STBD tack is right of no-go
-    const float left_no_go_heading_rad = wrap_2PI(true_wind_rad + radians(sail_no_go));
-    const float right_no_go_heading_rad = wrap_2PI(true_wind_rad - radians(sail_no_go));
+    // calculate left and right no go headings looking upwind and downwind
+    // Port tack heading is left no-go, STBD tack is right of no-go
+    const float port_closehauled_heading_rad = wrap_2PI(true_wind_rad + radians(sail_no_go));
+    const float stbd_closehauled_heading_rad = wrap_2PI(true_wind_rad - radians(sail_no_go));
+    const float port_broadreach_heading_rad = wrap_2PI(true_wind_rad + radians(180) - radians(sail_no_go));
+    const float stbd_broadreach_heading_rad = wrap_2PI(true_wind_rad + radians(180) + radians(sail_no_go));
 
     // if tack triggered, calculate target heading
     if (should_tack && (now - tack_clear_ms) > TACK_RETRY_TIME_MS) {
@@ -494,10 +517,10 @@ float Sailboat::calc_heading(float desired_heading_cd)
         // calculate target heading for the new tack
         switch (current_tack) {
             case AP_WindVane::Sailboat_Tack::TACK_PORT:
-                tack_heading_rad = right_no_go_heading_rad;
+                tack_heading_rad = is_traveling_upwind ? stbd_closehauled_heading_rad : stbd_broadreach_heading_rad;
                 break;
             case AP_WindVane::Sailboat_Tack::TACK_STARBOARD:
-                tack_heading_rad = left_no_go_heading_rad;
+                tack_heading_rad = is_traveling_upwind ? port_closehauled_heading_rad : port_broadreach_heading_rad;
                 break;
         }
         currently_tacking = true;
@@ -524,11 +547,21 @@ float Sailboat::calc_heading(float desired_heading_cd)
     }
 
     // return the correct heading for our current tack
-    if (current_tack == AP_WindVane::Sailboat_Tack::TACK_PORT) {
-        return degrees(left_no_go_heading_rad) * 100.0f;
-    } else {
-        return degrees(right_no_go_heading_rad) * 100.0f;
+    // railed to furthest point of sail allowed
+    float desired_railed_heading_rad;
+    switch (current_tack) {
+        case AP_WindVane::Sailboat_Tack::TACK_PORT:
+            desired_railed_heading_rad = is_traveling_upwind ? port_closehauled_heading_rad : port_broadreach_heading_rad;
+            break;
+        case AP_WindVane::Sailboat_Tack::TACK_STARBOARD:
+            desired_railed_heading_rad = is_traveling_upwind ? stbd_closehauled_heading_rad : stbd_broadreach_heading_rad;
+            break;
+        default:
+            return desired_heading_cd;
     }
+
+    // rad -> centidegrees
+    return degrees(desired_railed_heading_rad) * 100.0f;
 }
 
 // set state of motor
