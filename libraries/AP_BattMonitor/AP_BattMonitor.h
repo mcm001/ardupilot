@@ -136,7 +136,7 @@ public:
         uint32_t    low_voltage_start_ms;      // time when voltage dropped below the minimum in milliseconds
         uint32_t    critical_voltage_start_ms; // critical voltage failsafe start timer in milliseconds
         float       temperature;               // battery temperature in degrees Celsius
-#if AP_TEMPERATURE_SENSOR_ENABLED
+#if AP_TEMPERATURE_SENSOR_ENABLED || 1
         bool        temperature_external_use;
         float       temperature_external;      // battery temperature set by an external source in degrees Celsius
 #endif
@@ -234,7 +234,7 @@ public:
     // temperature
     bool get_temperature(float &temperature) const { return get_temperature(temperature, AP_BATT_PRIMARY_INSTANCE); }
     bool get_temperature(float &temperature, const uint8_t instance) const;
-#if AP_TEMPERATURE_SENSOR_ENABLED
+#if AP_TEMPERATURE_SENSOR_ENABLED || 1
     bool set_temperature(const float temperature, const uint8_t instance);
     bool set_temperature_by_serial_number(const float temperature, const int32_t serial_number);
 #endif

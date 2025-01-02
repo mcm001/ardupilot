@@ -695,7 +695,7 @@ bool AP_BattMonitor::get_temperature(float &temperature, const uint8_t instance)
         return false;
     } 
     
-#if AP_TEMPERATURE_SENSOR_ENABLED
+#if AP_TEMPERATURE_SENSOR_ENABLED || 1
     if (state[instance].temperature_external_use) {
         temperature = state[instance].temperature_external;
         return true;
@@ -707,11 +707,15 @@ bool AP_BattMonitor::get_temperature(float &temperature, const uint8_t instance)
     return drivers[instance]->has_temperature();
 }
 
-#if AP_TEMPERATURE_SENSOR_ENABLED
+#if AP_TEMPERATURE_SENSOR_ENABLED || 1
+#include <GCS_MAVLink/GCS.h>
+
 // return true when successfully setting a battery temperature from an external source by instance
 bool AP_BattMonitor::set_temperature(const float temperature, const uint8_t instance)
 {
     if (instance >= _num_instances || drivers[instance] == nullptr) {
+        if (instance >= _num_instances) gcs().send_text(MAV_SEVERITY_CRITICAL, "Invalid battery idx %i", instance);
+        if (drivers[instance] == nullptr) gcs().send_text(MAV_SEVERITY_CRITICAL, "battery is null? %i", instance);
         return false;
     }
     state[instance].temperature_external = temperature;

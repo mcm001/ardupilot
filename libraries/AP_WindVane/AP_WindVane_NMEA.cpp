@@ -16,6 +16,10 @@
 #include <AP_HAL/AP_HAL.h>
 #include "AP_WindVane_NMEA.h"
 #include <AP_SerialManager/AP_SerialManager.h>
+#include <AP_TemperatureSensor/AP_TemperatureSensor.h>
+#include <AP_BattMonitor/AP_BattMonitor.h>
+#include <GCS_MAVLink/GCS.h>
+
 
 /*
     NMEA wind vane library, tested with Calypso Wired sensor,
@@ -141,6 +145,12 @@ bool AP_WindVane_NMEA::decode_latest_term()
         const char *term_type = &_term[2];
         if (strcmp(term_type, "MWV") == 0) {
             // we found the sentence type for wind
+            _sentence_type = SentenceType::MWV;
+            _sentence_valid = true;
+        }
+        if (strcmp(term_type, "XDR") == 0) {
+            // we found the sentence type for wind
+            _sentence_type = SentenceType::XDR;
             _sentence_valid = true;
         }
         return false;
@@ -151,6 +161,21 @@ bool AP_WindVane_NMEA::decode_latest_term()
         return false;
     }
 
+    switch(_sentence_type) {
+        case SentenceType::MWV:
+            parse_mwv();
+            break;
+        case SentenceType::XDR:
+            parse_xdr();
+            break;
+        default:
+            break;
+    }
+
+    return false;
+}
+
+void AP_WindVane_NMEA::parse_mwv() {
     switch (_term_number) {
         case 1:
             _wind_dir_deg = strtof(_term, NULL);
@@ -193,7 +218,24 @@ bool AP_WindVane_NMEA::decode_latest_term()
                 _sentence_valid = false;
             }
             break;
-
     }
-    return false;
+}
+void AP_WindVane_NMEA::parse_xdr() {
+   // there are 4 terms in each chunk at indices [1,2,3,4],[5,6,7,8], ...
+   // Figure out the index into the chunk, and the overall chunk number
+   int termMod = ((_term_number - 1) % 4) + 1;
+   int readingNum = _term_number / 4;
+
+   switch (termMod) {
+      // Position 2 - measurement data - is the only one we care about
+      case 2:
+         _voltages[readingNum] = strtof(_term, NULL);
+         AP::battery().set_temperature(_voltages[readingNum], 2 + readingNum);
+         break;
+      case 1:
+      case 3:
+      case 4:
+      default:
+        break;
+    }
 }

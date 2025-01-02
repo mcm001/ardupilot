@@ -42,9 +42,16 @@ private:
     // decode each term
     bool decode_latest_term();
 
+    // Decode specific sentences
+    void parse_mwv();
+    void parse_xdr();
+
     // latest values read in
     float _speed_ms;
     float _wind_dir_deg;
+
+    // Latest voltage inputs
+    float _voltages[3];
 
     char _term[15];            // buffer for the current term within the current sentence
     uint8_t _term_offset;      // offset within the _term buffer where the next character should be placed
@@ -53,4 +60,44 @@ private:
     bool _term_is_checksum;    // current term is the checksum
     bool _sentence_valid;      // is current sentence valid so far
     bool _sentence_done;       // true if this sentence has already been decoded
+
+    enum class SentenceType {
+
+        /**
+        *        1   2 3   4 5
+        *        |   | |   | |
+        * $--MWV,x.x,a,x.x,a*hh<CR><LF>
+        * 
+        * Fields:
+        * 
+        * 1: Wind Angle, 0 to 359 degrees
+        * 2: Reference, R = Relative, T = True
+        * 3: Wind Speed
+        * 4: Wind Speed Units, K/M/
+        * 5: Status, A = Data Valid, V = Invalid
+        */
+        MWV,
+
+        /**
+        *        1 2   3 4            n
+        *        | |   | |            |
+        * $--XDR,a,x.x,a,c--c, ..... *hh<CR><LF>
+        * 
+        * 
+        * 1: Transducer Type 
+        *   "P" pressure
+        *   "C" temperature
+        *   "A" angle
+        * 2: Measurement Data
+        * 3: Units of measurement 
+        *   A = Amperes B = Bars B = Binary C = Celsius 
+        *   D = Degrees H = Hertz I = liters/second 
+        *   K = Kelvin K = kg/m3 M = Meters M = cubic Meters 
+        *   N = Newton P = % of full range P = Pascal R = RPM 
+        *   S = Parts per thousand V = Volts
+        * 4: Name of transducer
+        */
+        XDR,
+    };
+    SentenceType _sentence_type;
 };
